@@ -1,0 +1,10 @@
+/target/
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+/frontend/.env
+/frontend/.env.local
+
+/groth16-verifier/target/
+
+git rm -r --cached groth16-verifier/target/

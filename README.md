@@ -11,3 +11,6 @@ ZK DevKit	stellar-zk — unified CLI that handles circuit compilation, proof gen
 Smart Contract	Soroban Groth16 verifier contract (BN254)
 Frontend	React + TypeScript + @stellar/stellar-sdk
 Network	Stellar Testnet
+
+
+

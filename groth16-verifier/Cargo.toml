@@ -1,0 +1,17 @@
+[package]
+name = "groth16-verifier"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { version = "25.0.0", features = ["hazmat-crypto"] }
+
+[features]
+testutils = ["soroban-sdk/testutils"]
+
+[profile.release]
+overflow-checks = true
