@@ -1,123 +1,167 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import React, { useState, useEffect } from "react";
+import { isConnected, setAllowed, getAddress } from "@stellar/freighter-api";
+import Button from "./Button";
 
 interface ConnectWalletProps {
-    onConnect: (publicKey: string) => void;
+  onConnect: (publicKey: string) => void;
 }
 
 export default function ConnectWallet({ onConnect }: ConnectWalletProps) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [isConnecting, setIsConnecting] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isConnecting, setIsConnecting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
-    const wallets = [
-        { id: 'freighter', name: 'Freighter Wallet', icon: '🚀' },
-        { id: 'xbull', name: 'xBull Wallet', icon: '🐂' },
-        { id: 'albedo', name: 'Albedo Link', icon: '🛡️' }
-    ];
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
-    const connectWalletProvider = async (walletId: string) => {
-        setIsConnecting(walletId);
-        setError(null);
+  const providers = [
+    { id: "freighter", name: "Freighter Wallet", icon: "🚀" },
+    { id: "xbull", name: "xBull Wallet", icon: "🐂" },
+    { id: "albedo", name: "Albedo Link", icon: "🛡️" },
+  ];
 
-        try {
-            if (typeof window === 'undefined') return;
-            const targetWindow = window as any;
-            let publicKey = '';
+  const connectWalletProvider = async (walletId: string) => {
+    if (!isClient) return;
 
-            if (walletId === 'freighter') {
-                // Check standard window injection properties safely
-                const freighterAPI = targetWindow.starlight?.freighter || targetWindow.freighter;
-                
-                if (!freighterAPI) {
-                    throw new Error('Freighter extension not detected! Please ensure the extension is active, unlocked, and has "Site Access" permissions enabled for localhost in your browser toolbar.');
-                }
-                publicKey = await freighterAPI.getPublicKey();
-                
-            } else if (walletId === 'xbull') {
-                if (!targetWindow.xBull) {
-                    throw new Error('xBull extension not found! Ensure it is active.');
-                }
-                const accounts = await targetWindow.xBull.getPublicKey();
-                publicKey = typeof accounts === 'string' ? accounts : accounts;
-                
-            } else if (walletId === 'albedo') {
-                if (!targetWindow.albedo) {
-                    throw new Error('Albedo authentication helper not found.');
-                }
-                const session = await targetWindow.albedo.publicKey({});
-                publicKey = session.pubkey;
-            }
+    setIsConnecting(walletId);
+    setError(null);
 
-            if (!publicKey) {
-                throw new Error('Connection request dismissed by the user.');
-            }
+    try {
+      let publicKey = "";
 
-            // Save active selection context to route subsequent transaction signatures correctly
-            localStorage.setItem('zk_connected_provider', walletId);
-            onConnect(publicKey);
-            setIsOpen(false);
-            
-        } catch (err) {
-            console.error('Wallet link trace failure:', err);
-            setError(err instanceof Error ? err.message : 'Wallet authorization failure.');
-        } finally {
-            setIsConnecting(null);
+      if (walletId === "freighter") {
+        // Step 1: Check if Freighter is installed
+        const isFreighterInstalled = await isConnected();
+        if (!isFreighterInstalled) {
+          window.open("https://freighter.app", "_blank");
+          throw new Error(
+            "Freighter extension not found! Please install it from https://freighter.app"
+          );
         }
-    };
 
+        // Step 2: Request connection
+        await setAllowed();
+
+        // Step 3: Get the public key
+        const address = await getAddress();
+        publicKey = address.address;
+
+        if (!publicKey) {
+          throw new Error("No account found. Please ensure Freighter is unlocked.");
+        }
+      } else if (walletId === "xbull") {
+        // xBull connection logic
+        const xBull = (window as any).xBull;
+        if (!xBull) {
+          window.open("https://xbull.app", "_blank");
+          throw new Error("xBull extension not found!");
+        }
+        const accounts = await xBull.getPublicKey();
+        publicKey = typeof accounts === "string" ? accounts : accounts[0];
+      } else if (walletId === "albedo") {
+        const albedo = (window as any).albedo;
+        if (!albedo) {
+          window.open("https://albedo.link", "_blank");
+          throw new Error("Albedo not found!");
+        }
+        const session = await albedo.publicKey({});
+        publicKey = session.pubkey;
+      }
+
+      if (!publicKey) {
+        throw new Error("Connection request dismissed by the user.");
+      }
+
+      localStorage.setItem("zk_connected_provider", walletId);
+      onConnect(publicKey);
+      setIsOpen(false);
+    } catch (err) {
+      console.error("Wallet connection error:", err);
+      setError(err instanceof Error ? err.message : "Wallet authorization failure.");
+    } finally {
+      setIsConnecting(null);
+    }
+  };
+
+  if (!isClient) {
     return (
-        <div className="w-full">
-            <button
-                onClick={() => setIsOpen(true)}
-                className="w-full cursor-pointer rounded-xl bg-primary px-4 py-3.5 font-semibold text-white transition-all duration-200 hover:bg-primary-hover focus:outline-hidden focus:ring-2 focus:ring-primary/50"
-            >
-                Connect Stellar Wallet
-            </button>
-
-            {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-                    <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl ring-1 ring-border border border-border">
-                        <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
-                            <h3 className="text-lg font-bold text-foreground">Select a Wallet</h3>
-                            <button 
-                                onClick={() => setIsOpen(false)}
-                                className="text-muted hover:text-foreground cursor-pointer text-xl font-bold p-1"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        {error && (
-                            <div className="mb-4 rounded-xl border border-red-200/60 bg-red-50/50 p-3 dark:border-red-900/30 dark:bg-red-950/20">
-                                <p className="text-xs font-medium text-red-600 dark:text-red-400">{error}</p>
-                            </div>
-                        )}
-
-                        <div className="space-y-2">
-                            {wallets.map((provider) => (
-                                <button
-                                    key={provider.id}
-                                    onClick={() => connectWalletProvider(provider.id)}
-                                    disabled={isConnecting !== null}
-                                    className="flex w-full cursor-pointer items-center gap-4 rounded-xl border border-border bg-muted-bg/30 p-3.5 transition-all duration-200 hover:border-primary/50 hover:bg-muted-bg disabled:opacity-50 disabled:cursor-not-allowed text-left group"
-                                >
-                                    <span className="text-2xl transition-transform duration-200 group-hover:scale-110">
-                                        {provider.icon}
-                                    </span>
-                                    <span className="font-semibold text-foreground flex-1 group-hover:text-primary">
-                                        {provider.name}
-                                    </span>
-                                    {isConnecting === provider.id && (
-                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+      <div className="w-full">
+        <button
+          disabled
+          className="w-full bg-gray-400 text-white font-bold py-2 px-4 rounded opacity-50 cursor-not-allowed"
+        >
+          Loading wallet...
+        </button>
+      </div>
     );
+  }
+
+  return (
+    <div className="w-full">
+      <Button onClick={() => setIsOpen(true)} className="w-full">
+        Connect Stellar Wallet
+      </Button>
+
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-4 mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Select a Wallet</h3>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-gray-500 hover:text-gray-700 text-xl font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3">
+                <p className="text-sm font-medium text-red-600">{error}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {providers.map((provider) => (
+                <button
+                  key={provider.id}
+                  onClick={() => connectWalletProvider(provider.id)}
+                  disabled={isConnecting !== null}
+                  className="flex w-full items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-3.5 transition-all duration-200 hover:border-blue-500 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-left group"
+                >
+                  <span className="text-2xl transition-transform duration-200 group-hover:scale-110">
+                    {provider.icon}
+                  </span>
+                  <span className="font-semibold text-gray-900 flex-1 group-hover:text-blue-600">
+                    {provider.name}
+                  </span>
+                  {isConnecting === provider.id && (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-6 text-center text-xs text-gray-500">
+              <p>
+                Don't have a wallet?{" "}
+                <a
+                  href="https://freighter.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  Get started with Freighter
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

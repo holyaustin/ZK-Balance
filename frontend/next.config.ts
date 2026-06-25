@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
-  // Fix: webpack is passed directly into the callback arguments by Next.js
+
   webpack: (config, { isServer, webpack }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -16,6 +17,7 @@ const nextConfig: NextConfig = {
       // Fix: Use the locally scoped webpack object directly 
       config.plugins.push(
         new webpack.ProvidePlugin({
+          window: path.resolve("./app/window.js"),
           process: "process/browser",
           Buffer: ["buffer", "Buffer"],
         })

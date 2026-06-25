@@ -1,136 +1,122 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-// Fix 1: Adjusted imports from root layout path configuration rather than using '@/'
-import { generateProof } from '../lib/proofGenerator';
-import { verifyOnChain } from '../lib/verifier';
-import { Horizon } from '@stellar/stellar-sdk';
+import React, { useState } from "react";
+import { horizonServer } from "@/lib/stellar";
+import { verifyOnChain } from "@/lib/verifier";
+import Button from "./Button";
+import Input from "./Input";
 
 interface BalanceCheckerProps {
-    publicKey: string;
-    onVerifyStart: () => void;
-    onVerifyComplete: (result: boolean) => void;
+  publicKey: string;
+  onVerifyStart: () => void;
+  onVerifyComplete: (result: boolean) => void;
 }
 
 export default function BalanceChecker({
-    publicKey,
-    onVerifyStart,
-    onVerifyComplete,
+  publicKey,
+  onVerifyStart,
+  onVerifyComplete,
 }: BalanceCheckerProps) {
-    const [threshold, setThreshold] = useState('100');
-    const [assetCode, setAssetCode] = useState('USDC');
-    const [userBalance, setUserBalance] = useState<number | null>(null);
-    const [error, setError] = useState<string | null>(null);
+  const [threshold, setThreshold] = useState("100");
+  const [assetCode, setAssetCode] = useState("USDC");
+  const [userBalance, setUserBalance] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-    const fetchBalance = async () => {
-        try {
-            const server = new Horizon.Server('https://horizon-testnet.stellar.org');
-            const account = await server.loadAccount(publicKey);
-            
-            // Fix 4: TypeScript discrimination check mapping to separate Native entries from Token assets cleanly
-            const balance = account.balances.find((b) => {
-                if (assetCode === 'XLM') {
-                    return b.asset_type === 'native';
-                }
-                return 'asset_code' in b && b.asset_code === assetCode;
-            });
-            
-            const balanceAmount = parseFloat(balance?.balance || '0');
-            setUserBalance(balanceAmount);
-            
-            return balanceAmount;
-        } catch (err) {
-            setError('Failed to fetch balance');
-            return 0;
-        }
+  const fetchBalance = async () => {
+    try {
+      const account = await horizonServer.loadAccount(publicKey);
+      const balance = account.balances.find(
+        (b) => b.asset_type === "credit_alphanum4" && b.asset_code === assetCode
+      );
+      const balanceAmount = parseFloat(balance?.balance || "0");
+      setUserBalance(balanceAmount);
+      return balanceAmount;
+    } catch (err) {
+      setError("Failed to fetch balance");
+      return 0;
+    }
+  };
+
+  const handleVerify = async () => {
+    setError(null);
+    onVerifyStart();
+
+    try {
+      const balanceAmount = await fetchBalance();
+      const balanceInSmallest = Math.floor(balanceAmount * 10000000);
+      const thresholdInSmallest = Math.floor(parseFloat(threshold) * 10000000);
+
+      // Generate ZK proof (you'll implement this using snarkjs)
+      const { proof, pubInputs } = await generateProof(
+        balanceInSmallest,
+        thresholdInSmallest
+      );
+
+      const contractId = process.env.NEXT_PUBLIC_VERIFIER_CONTRACT_ID!;
+      const result = await verifyOnChain(
+        proof,
+        pubInputs,
+        contractId,
+        publicKey
+      );
+
+      onVerifyComplete(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+      onVerifyComplete(false);
+    }
+  };
+
+  // Placeholder for proof generation
+  const generateProof = async (balance: number, threshold: number) => {
+    // You'll implement this using snarkjs
+    // For now, return mock data
+    return {
+      proof: {
+        a: "0x1234",
+        b: "0x5678",
+        c: "0x9abc",
+      },
+      pubInputs: [threshold.toString(), "1"],
     };
+  };
 
+  return (
+    <div className="space-y-6">
+      <Input
+        type="text"
+        placeholder="USDC"
+        value={assetCode}
+        onChange={(e) => setAssetCode(e.target.value.toUpperCase())}
+        label="Asset Code"
+      />
 
-    const handleVerify = async () => {
-        setError(null);
-        onVerifyStart();
+      <Input
+        type="number"
+        placeholder="100"
+        value={threshold}
+        onChange={(e) => setThreshold(e.target.value)}
+        label="Minimum Balance"
+        required
+      />
 
-        try {
-            const balanceAmount = await fetchBalance();
-            const balanceInSmallest = Math.floor(balanceAmount * 10000000); 
-            const thresholdInSmallest = Math.floor(parseFloat(threshold) * 10000000);
-
-            const { proof, pubInputs } = await generateProof(
-                balanceInSmallest,
-                thresholdInSmallest
-            );
-
-            const contractId = process.env.NEXT_PUBLIC_VERIFIER_CONTRACT_ID!;
-            if (!contractId) {
-                throw new Error('Missing contract identifier context configuration.');
-            }
-
-            const result = await verifyOnChain(
-                proof,
-                pubInputs,
-                contractId,
-                publicKey
-            );
-
-            onVerifyComplete(result);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Cryptographic proof pipeline failure');
-            onVerifyComplete(false);
-        }
-    };
-
-    return (
-        <div className="space-y-6">
-            {/* Tailwind v4 layout grid utilizing native border variations */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                    <label className="mb-2 block text-sm font-semibold text-foreground/80">
-                        Asset Code
-                    </label>
-                    <input
-                        type="text"
-                        value={assetCode}
-                        onChange={(e) => setAssetCode(e.target.value.toUpperCase())}
-                        className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-foreground focus:border-primary/80 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
-                        placeholder="USDC"
-                    />
-                </div>
-                <div>
-                    <label className="mb-2 block text-sm font-semibold text-foreground/80">
-                        Minimum Balance
-                    </label>
-                    <input
-                        type="number"
-                        value={threshold}
-                        onChange={(e) => setThreshold(e.target.value)}
-                        className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-foreground focus:border-primary/80 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
-                        placeholder="100"
-                        min="0"
-                        step="1"
-                    />
-                </div>
-            </div>
-
-            {userBalance !== null && (
-                <div className="rounded-xl border border-border bg-muted-bg p-4">
-                    <p className="text-sm text-muted">
-                        Current balance: <span className="font-bold text-foreground">{userBalance} {assetCode}</span>
-                    </p>
-                </div>
-            )}
-
-            <button
-                onClick={handleVerify}
-                className="w-full cursor-pointer rounded-xl bg-primary px-4 py-3.5 font-bold text-white transition-all duration-200 hover:bg-primary-hover focus:outline-hidden focus:ring-2 focus:ring-primary/50"
-            >
-                Generate & Verify Proof
-            </button>
-
-            {error && (
-                <div className="rounded-xl border border-red-200/60 bg-red-50/50 p-4 dark:border-red-900/30 dark:bg-red-950/20">
-                    <p className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p>
-                </div>
-            )}
+      {userBalance !== null && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+          <p className="text-blue-700 text-sm">
+            Current balance: <span className="font-semibold">{userBalance} {assetCode}</span>
+          </p>
         </div>
-    );
+      )}
+
+      <Button onClick={handleVerify} className="w-full bg-green-500 hover:bg-green-700">
+        Generate & Verify Proof
+      </Button>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-3">
+          <p className="text-red-600 text-sm">{error}</p>
+        </div>
+      )}
+    </div>
+  );
 }
