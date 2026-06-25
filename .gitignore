@@ -1,10 +1,24 @@
-/target/
+# ZK Circuits - Large generated files
+/zk-circuits/*.ptau
+/zk-circuits/*.r1cs
+/zk-circuits/*.sym
+/zk-circuits/*.wtns
+/zk-circuits/*.zkey
+/zk-circuits/balance_proof_js/
+/zk-circuits/node_modules/
+/zk-circuits/balance_proof.wasm
+
+# Frontend
 /frontend/node_modules/
 /frontend/.next/
 /frontend/out/
 /frontend/.env
 /frontend/.env.local
 
+# Contract
 /groth16-verifier/target/
 
-git rm -r --cached groth16-verifier/target/
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store

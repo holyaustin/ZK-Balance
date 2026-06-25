@@ -3,11 +3,11 @@
 
 echo "📦 Setting up Circomlib..."
 # Install circomlib (the standard library for Circom)
-npm install -g circomlib
+npm install circomlib
 
 echo "🔨 Compiling the circuit..."
 # Compile the circuit to R1CS format (binary constraints)
-circom balance_proof.circom --r1cs --wasm --sym
+circom balance_proof.circom --r1cs --wasm --sym -l ../node_modules
 
 echo "✅ Compilation complete!"
 echo "Generated files:"
