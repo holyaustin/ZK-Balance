@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
       // Fix: Use the locally scoped webpack object directly 
       config.plugins.push(
         new webpack.ProvidePlugin({
-          window: path.resolve("./app/window.js"),
+          //window: path.resolve("./app/window.js"),
           process: "process/browser",
           Buffer: ["buffer", "Buffer"],
         })
@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  
 };
 
 export default nextConfig;

@@ -1,12 +1,10 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, 
+    contract, contracterror, contractimpl,
     BytesN, Env, U256, Vec,
-    crypto::bn254::{Bn254G1Affine, Bn254G2Affine},
+    crypto::bn254::{Bn254G1Affine, Bn254G2Affine, Fr},   // <-- Fr, not Bn254Fr
 };
 
-// Fix 1: Renamed from 'Error' to avoid clashing with the SDK's internal error types
-// Fix 2: Changed from #[contracttype] to #[contracterror] for clean execution reverts
 #[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContractError {
@@ -20,44 +18,61 @@ pub struct Groth16Verifier;
 
 #[contractimpl]
 impl Groth16Verifier {
-    /// Verify a Groth16 proof
-    /// 
-    /// # Arguments
-    /// * `a` - The A point of the proof (G1 point, 64 bytes)
-    /// * `b` - The B point of the proof (G2 point, 128 bytes)
-    /// * `c` - The C point of the proof (G1 point, 64 bytes)
-    /// * `public_inputs` - The public inputs and output
+    /// Verify a Groth16 proof using a verification key
     pub fn verify(
         env: Env,
         a: BytesN<64>,           
         b: BytesN<128>,          
         c: BytesN<64>,           
-        _public_inputs: Vec<U256>, // Prepended with '_' until you pass it to multi-pairing calculations
+        public_inputs: Vec<U256>,
+        vk_alpha_g1: BytesN<64>,    // Fixed VK point [α]1
+        vk_beta_g2: BytesN<128>,    // Fixed VK point [β]2
+        vk_gamma_g2: BytesN<128>,   // Fixed VK point [γ]2
+        vk_delta_g2: BytesN<128>,   // Fixed VK point [δ]2
+        vk_ic: Vec<BytesN<64>>,     // Circuit-specific IC points for inputs
     ) -> bool {
-        // Fix 3: In v25, from_bytes consumes the BytesN object directly without `&env` or references.
+        // 1. Parse and validate base proof components lengths
         let g1_a = Bn254G1Affine::from_bytes(a);
         let g2_b = Bn254G2Affine::from_bytes(b);
         let g1_c = Bn254G1Affine::from_bytes(c);
 
-        // Fix 4: Set up vectors passing types by value into the host pairing validator
+        if public_inputs.len() + 1 != vk_ic.len() {
+            return false;
+        }
+
+        // 2. Compute the Public Inputs Accumulator (MSM: IC + ∑ (input_i * IC[i+1]))
+        let mut vk_x = Bn254G1Affine::from_bytes(vk_ic.get(0).unwrap());
+        
+        for i in 0..public_inputs.len() {
+            let input = public_inputs.get(i).unwrap();
+            let ic_point = Bn254G1Affine::from_bytes(vk_ic.get(i + 1).unwrap());
+            
+            // FIX: Convert Soroban U256 directly to Bn254Fr via standard From trait
+            let scalar_input = Fr::from(input);
+            
+            // EC point scalar multiplication and addition
+            vk_x = vk_x + (ic_point * scalar_input);
+        }
+
+        // 3. Construct elements for the multi-pairing check
+        // Equation rearranged for single pairing_check target: e(A, B) * e(-X, Γ) * e(-C, Δ) * e(-α, β) = 1
         let mut g1_points = Vec::new(&env);
-        let mut g2_points = Vec::new(&env);
-
         g1_points.push_back(g1_a);
-        g1_points.push_back(g1_c);
+        g1_points.push_back(-vk_x);
+        g1_points.push_back(-g1_c);
+        g1_points.push_back(-Bn254G1Affine::from_bytes(vk_alpha_g1));
         
+        let mut g2_points = Vec::new(&env);
         g2_points.push_back(g2_b);
+        g2_points.push_back(Bn254G2Affine::from_bytes(vk_gamma_g2));
+        g2_points.push_back(Bn254G2Affine::from_bytes(vk_delta_g2));
+        g2_points.push_back(Bn254G2Affine::from_bytes(vk_beta_g2));
         
-        // Note: For a fully operational Groth16 verification, you will need to push the 
-        // compiled VK Gamma/Delta points combined with your public inputs into these vectors.
-        
-        // Fix 5: Access the Protocol 25 native pairing check via env.crypto().bn254()
-        let pairing_result = env.crypto().bn254().pairing_check(g1_points, g2_points);
-
-        pairing_result
+        // 4. Execute optimized host call
+        env.crypto().bn254().pairing_check(g1_points, g2_points)
     }
 
-    /// A helper function to verify the proof and also check the output
+    /// Application-specific helper function checking threshold boundaries
     pub fn verify_balance(
         env: Env,
         a: BytesN<64>,
@@ -65,18 +80,20 @@ impl Groth16Verifier {
         c: BytesN<64>,
         threshold: U256,
         is_valid: U256,
+        vk_alpha_g1: BytesN<64>,
+        vk_beta_g2: BytesN<128>,
+        vk_gamma_g2: BytesN<128>,
+        vk_delta_g2: BytesN<128>,
+        vk_ic: Vec<BytesN<64>>,
     ) -> bool {
-        // Fix 6: U256 represents a host object and does not implement Copy. 
-        // We must clone `is_valid` before it gets consumed inside the array allocation.
         let public_inputs = Vec::from_array(&env, [threshold, is_valid.clone()]);
         
-        // Verify the proof
-        let proof_valid = Self::verify(env.clone(), a, b, c, public_inputs);
+        let proof_valid = Self::verify(
+            env.clone(), a, b, c, public_inputs,
+            vk_alpha_g1, vk_beta_g2, vk_gamma_g2, vk_delta_g2, vk_ic
+        );
         
-        // Also verify that the output is 1 (meaning balance >= threshold)
         let output_valid = is_valid == U256::from_u32(&env, 1);
-        
-        // Return true only if both conditions are met
         proof_valid && output_valid
     }
 }
@@ -90,18 +107,27 @@ mod test {
     fn test_verifier_setup() {
         let env = Env::default();
         
-        // Generate mock point inputs zeroed out for unit testing
         let a = BytesN::<64>::from_array(&env, &[0u8; 64]);
         let b = BytesN::<128>::from_array(&env, &[0u8; 128]);
         let c = BytesN::<64>::from_array(&env, &[0u8; 64]);
         let threshold = U256::from_u32(&env, 100);
         let is_valid = U256::from_u32(&env, 1);
 
+        let vk_alpha = BytesN::<64>::from_array(&env, &[0u8; 64]);
+        let vk_beta = BytesN::<128>::from_array(&env, &[0u8; 128]);
+        let vk_gamma = BytesN::<128>::from_array(&env, &[0u8; 128]);
+        let vk_delta = BytesN::<128>::from_array(&env, &[0u8; 128]);
+        
+        let mut vk_ic = Vec::new(&env);
+        vk_ic.push_back(BytesN::<64>::from_array(&env, &[0u8; 64]));
+        vk_ic.push_back(BytesN::<64>::from_array(&env, &[0u8; 64]));
+        vk_ic.push_back(BytesN::<64>::from_array(&env, &[0u8; 64]));
+
         let result = Groth16Verifier::verify_balance(
-            env, a, b, c, threshold, is_valid
+            env, a, b, c, threshold, is_valid,
+            vk_alpha, vk_beta, vk_gamma, vk_delta, vk_ic
         );
         
-        // Asserting false as zeroed inputs do not constitute a mathematically sound Groth16 proof
         assert_eq!(result, false);
     }
 }
