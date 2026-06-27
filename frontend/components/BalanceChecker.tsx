@@ -17,18 +17,18 @@ export default function BalanceChecker({
   onVerifyComplete,
 }: BalanceCheckerProps) {
   const [threshold, setThreshold] = useState("100");
-  const [assetCode, setAssetCode] = useState("XLM"); // Default to XLM for easier testing
+  const [assetCode, setAssetCode] = useState("XLM"); 
   const [userBalance, setUserBalance] = useState<number | null>(null);
+  const [showExactBalance, setShowExactBalance] = useState(false); // Default hidden for privacy
+  const [verificationSuccess, setVerificationSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchBalance = async () => {
     try {
-      // Use correct Testnet Horizon URL
       const server = new Horizon.Server('https://horizon-testnet.stellar.org');
       const account = await server.loadAccount(publicKey);
       
-      // Find the balance for the specified asset
       const balance = account.balances.find((b) => {
         if (assetCode === "XLM") {
           return b.asset_type === "native";
@@ -41,8 +41,6 @@ export default function BalanceChecker({
       return balanceAmount;
     } catch (err) {
       console.error('Balance fetch error:', err);
-      
-      // Check if account doesn't exist
       if (err instanceof Error && err.message.includes('404')) {
         setError(`Account not found on Testnet. Please fund it using the friendbot.`);
       } else {
@@ -54,18 +52,17 @@ export default function BalanceChecker({
 
   const handleVerify = async () => {
     setError(null);
+    setVerificationSuccess(false);
     onVerifyStart();
     setIsLoading(true);
 
     try {
-      // First, ensure we have a balance
       const balanceAmount = await fetchBalance();
       
       if (balanceAmount === 0) {
         throw new Error("Your account has no balance. Please fund it with testnet XLM first.");
       }
 
-      // Convert quantities using the standard 7-decimal place precision
       const balanceInSmallest = Math.floor(balanceAmount * 10000000);
       const thresholdInSmallest = Math.floor(parseFloat(threshold) * 10000000);
 
@@ -76,7 +73,6 @@ export default function BalanceChecker({
       console.log(`🔍 Balance: ${balanceAmount} ${assetCode}`);
       console.log(`🔍 Threshold: ${threshold} ${assetCode}`);
 
-      // Generate the ZK proof
       console.log('🔐 Generating proof...');
       const { proof, pubInputs } = await generateProof(
         balanceInSmallest,
@@ -84,7 +80,6 @@ export default function BalanceChecker({
       );
       console.log('✅ Proof generated!');
 
-      // Verify on-chain
       const contractId = process.env.NEXT_PUBLIC_VERIFIER_CONTRACT_ID!;
       if (!contractId) {
         throw new Error("Missing NEXT_PUBLIC_VERIFIER_CONTRACT_ID environment variable.");
@@ -97,6 +92,9 @@ export default function BalanceChecker({
         publicKey
       );
 
+      if (result) {
+        setVerificationSuccess(true);
+      }
       onVerifyComplete(result);
     } catch (err) {
       console.error('Verification error:', err);
@@ -142,12 +140,39 @@ export default function BalanceChecker({
       </div>
 
       {userBalance !== null && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-          <p className="text-sm font-medium text-gray-600 flex items-center justify-between gap-2">
-            <span>Current Balance:</span>
-            <span className="text-base font-extrabold text-gray-900">
-              {userBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} {assetCode}
-            </span>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 transition-all">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm font-medium text-gray-600">Account Balance Status:</span>
+            <button
+              type="button"
+              onClick={() => setShowExactBalance(!showExactBalance)}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 focus:outline-none flex items-center gap-1 cursor-pointer"
+            >
+              {showExactBalance ? (
+                <>
+                  <span>🙈 Hide Exact Value</span>
+                </>
+              ) : (
+                <>
+                  <span>👁️ Reveal Exact Value</span>
+                </>
+              )}
+            </button>
+          </div>
+          
+          <div className="mt-2 p-2 rounded-lg bg-white border border-gray-100 flex items-center justify-center min-h-[48px]">
+            {showExactBalance ? (
+              <span className="text-lg font-extrabold text-gray-900 tracking-tight transition-all animate-fade-in">
+                {userBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} {assetCode}
+              </span>
+            ) : (
+              <span className="text-lg font-bold text-gray-400 tracking-widest selection:bg-transparent select-none">
+                •••••••••••• {assetCode}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1 text-center">
+            Your exact balance is kept private. Only a zero-knowledge validity parameter is broadcasted on-chain.
           </p>
         </div>
       )}
@@ -155,15 +180,28 @@ export default function BalanceChecker({
       <button 
         onClick={handleVerify} 
         disabled={isLoading}
-        className="w-full cursor-pointer rounded-xl bg-blue-600 px-4 py-3.5 text-base font-bold text-white transition-all duration-200 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full cursor-pointer rounded-xl bg-blue-600 px-4 py-3.5 text-base font-bold text-white transition-all duration-200 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
       >
-        {isLoading ? 'Processing...' : 'Generate & Verify Proof'}
+        {isLoading ? 'Processing ZK Pipeline...' : 'Generate & Verify Proof'}
       </button>
 
+      {/* ANIMATED SUCCESS BANNER CARD */}
+      {verificationSuccess && (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-5 shadow-sm space-y-2 animate-bounce-short">
+          <div className="flex items-center gap-2.5 text-green-800">
+            <span className="text-xl">🛡️</span>
+            <h4 className="text-base font-bold tracking-tight">On-Chain Verification Successful</h4>
+          </div>
+          <p className="text-sm text-green-700 font-medium leading-relaxed">
+            The Soroban smart contract has successfully processed your Groth16 cryptographic proof. Your wallet has been validated to hold at least <strong>{parseFloat(threshold).toLocaleString()} {assetCode}</strong> without exposing your exact financial statements or raw data metrics to the ledger!
+          </p>
+        </div>
+      )}
+
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-bold text-red-600">
-            ⚠️ {error}
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+          <p className="text-sm font-bold text-red-600 flex items-center gap-2">
+            <span>⚠️</span> {error}
           </p>
         </div>
       )}
