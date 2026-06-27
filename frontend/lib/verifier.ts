@@ -4,6 +4,7 @@ import {
     rpc,  
     TransactionBuilder, 
     nativeToScVal,
+    scValToNative,
     Networks,
     BASE_FEE,
     xdr,
@@ -24,17 +25,8 @@ function formatU256ScVal(valueString: string): xdr.ScVal {
     return nativeToScVal(bigIntValue, { type: 'u256' });
 }
 
-// Helper to pad and convert a coordinate string component into a strict 32-byte big-endian buffer chunk.
-//
-// FIX: Do not try to "guess" whether the string is hex or decimal by inspecting
-// its characters/length — a plain decimal digit string (e.g. snarkjs's default
-// "21888242871839275...") is indistinguishable from hex using a character-class
-// regex, since 0-9 are valid in both. That heuristic either silently misparses
-// long decimal values as hex, or crashes on short hex values that contain a-f.
-//
-// BigInt() already does this correctly natively: a "0x"-prefixed string is parsed
-// as hex, anything else is parsed as decimal. So just preserve the prefix and let
-// it decide — don't strip it first.
+// Pad a single field-element coordinate (decimal or 0x-prefixed hex string) to 32 big-endian bytes.
+// BigInt() natively distinguishes "0x..." (hex) from plain digits (decimal) - no guessing needed.
 function padTo32Bytes(coordStr: unknown): Buffer {
     const str = (typeof coordStr === 'string' ? coordStr : String(coordStr)).trim();
 
@@ -44,7 +36,7 @@ function padTo32Bytes(coordStr: unknown): Buffer {
 
     let bigIntVal: bigint;
     try {
-        bigIntVal = BigInt(str); // handles "0x..." (hex) and plain digits (decimal) correctly
+        bigIntVal = BigInt(str);
     } catch (e) {
         throw new Error(`padTo32Bytes: could not parse "${str}" as a BigInt: ${(e as Error).message}`);
     }
@@ -60,10 +52,10 @@ function padTo32Bytes(coordStr: unknown): Buffer {
 export async function verifyOnChain(
     proof: { 
         a: string[];          // ["X", "Y"]
-        b: string[][];        // [ ["X1", "X0"], ["Y1", "Y0"] ]
+        b: string[][];        // [ ["X1", "X0"], ["Y1", "Y0"] ]  (snarkjs order)
         c: string[]           // ["X", "Y"]
     },
-    pubInputs: string[],      // Array containing [isValid, threshold]
+    pubInputs: string[],      // [isValid, threshold]
     contractId: string,
     publicKey: string
 ): Promise<boolean> {
@@ -72,7 +64,7 @@ export async function verifyOnChain(
         const account = await server.getAccount(publicKey);
         const contract = new Contract(contractId);
         
-        // --- 1. FORMAT G1 PROOF POINT COMPONENTS (A and C) WITH EXPLICIT INDEXING ---
+        // --- 1. FORMAT G1 PROOF POINT COMPONENTS (A and C) ---
         const aBytes = Buffer.concat([
             padTo32Bytes(proof.a[0]),
             padTo32Bytes(proof.a[1])
@@ -83,16 +75,17 @@ export async function verifyOnChain(
             padTo32Bytes(proof.c[1])
         ]);
         
-        // --- 2. DYNAMICALLY REORDER PROOF B (From SnarkJS X1,X0,Y1,Y0 to Soroban X0,X1,Y0,Y1) ---
-        // SnarkJS maps array layout as: proof.b[0] = [X1, X0], proof.b[1] = [Y1, Y0]
+        // --- 2. REORDER PROOF B per CAP-0074: be(X_c1) || be(X_c0) || be(Y_c1) || be(Y_c0) ---
+        // snarkjs/ffjavascript's internal Fp2 representation is [c0, c1] (index 0 = c0, index 1 = c1),
+        // so we take index 1 first, then index 0, for both X and Y - matching Soroban's BN254 G2 spec.
         const bBytes = Buffer.concat([
-            padTo32Bytes(proof.b[0][1]), // Real Part X0 leads
-            padTo32Bytes(proof.b[0][0]), // Imaginary Part X1 follows
-            padTo32Bytes(proof.b[1][1]), // Real Part Y0 leads
-            padTo32Bytes(proof.b[1][0])  // Imaginary Part Y1 follows
+            padTo32Bytes(proof.b[0][1]), // X_c1
+            padTo32Bytes(proof.b[0][0]), // X_c0
+            padTo32Bytes(proof.b[1][1]), // Y_c1
+            padTo32Bytes(proof.b[1][0])  // Y_c0
         ]);
         
-        // --- 3. COPIED FRESH CRYPTOGRAPHIC CIRCUIT KEYS ---
+        // --- 3. VERIFICATION KEY (fixed circuit constants) ---
         const vkAlphaG1Bytes = Buffer.from(
             "2d4d9aa7e302d9df41749d5507949d05dbea33fbb16c643b22f599a2be6df2e214bedd503c37ceb061d8ec60209fe345ce89830a19230301f076caff004d1926",
             "hex"
@@ -171,8 +164,26 @@ export async function verifyOnChain(
         }
         
         if (getResponse.status === 'SUCCESS') {
-            console.log('✅ On-Chain Verification successful!');
-            return true;
+            // IMPORTANT: "SUCCESS" only means the transaction was applied without
+            // trapping. It does NOT mean the contract returned `true`. A contract
+            // that correctly computes that the proof is invalid (e.g. threshold
+            // exceeds balance) still returns a *successful* transaction with a
+            // return value of `false`. We must decode that return value to know
+            // what the contract actually concluded.
+            if (!getResponse.returnValue) {
+                console.warn('⚠️ Transaction succeeded but no return value was present.');
+                return false;
+            }
+
+            const result = scValToNative(getResponse.returnValue);
+
+            if (result === true) {
+                console.log('✅ On-Chain Verification successful! Proof is valid.');
+            } else {
+                console.log('❌ Transaction succeeded, but the contract reported the proof as INVALID:', result);
+            }
+
+            return result === true;
         }
         
         console.error('Transaction execution failed:', getResponse);

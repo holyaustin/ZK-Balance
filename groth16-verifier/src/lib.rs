@@ -2,7 +2,7 @@
 use soroban_sdk::{
     contract, contracterror, contractimpl,
     BytesN, Env, U256, Vec,
-    crypto::bn254::{Bn254G1Affine, Bn254G2Affine, Fr},   // <-- Fr, not Bn254Fr
+    crypto::bn254::{Bn254G1Affine, Bn254G2Affine, Fr},
 };
 
 #[contracterror]
@@ -31,7 +31,7 @@ impl Groth16Verifier {
         vk_delta_g2: BytesN<128>,   // Fixed VK point [δ]2
         vk_ic: Vec<BytesN<64>>,     // Circuit-specific IC points for inputs
     ) -> bool {
-        // 1. Parse and validate base proof components lengths
+        // 1. Parse base proof components
         let g1_a = Bn254G1Affine::from_bytes(a);
         let g2_b = Bn254G2Affine::from_bytes(b);
         let g1_c = Bn254G1Affine::from_bytes(c);
@@ -47,15 +47,12 @@ impl Groth16Verifier {
             let input = public_inputs.get(i).unwrap();
             let ic_point = Bn254G1Affine::from_bytes(vk_ic.get(i + 1).unwrap());
             
-            // FIX: Convert Soroban U256 directly to Bn254Fr via standard From trait
             let scalar_input = Fr::from(input);
-            
-            // EC point scalar multiplication and addition
             vk_x = vk_x + (ic_point * scalar_input);
         }
 
         // 3. Construct elements for the multi-pairing check
-        // Equation rearranged for single pairing_check target: e(A, B) * e(-X, Γ) * e(-C, Δ) * e(-α, β) = 1
+        // Mathematical identity holds true: e(A, B) * e(-X, Γ) * e(-C, Δ) * e(-α, β) = 1
         let mut g1_points = Vec::new(&env);
         g1_points.push_back(g1_a);
         g1_points.push_back(-vk_x);
@@ -86,7 +83,8 @@ impl Groth16Verifier {
         vk_delta_g2: BytesN<128>,
         vk_ic: Vec<BytesN<64>>,
     ) -> bool {
-        let public_inputs = Vec::from_array(&env, [threshold, is_valid.clone()]);
+        // [is_valid, threshold] matches the strict layout order of the Circom circuit public signals
+        let public_inputs = Vec::from_array(&env, [is_valid.clone(), threshold]);
         
         let proof_valid = Self::verify(
             env.clone(), a, b, c, public_inputs,

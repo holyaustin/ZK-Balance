@@ -11,6 +11,8 @@ interface BalanceCheckerProps {
   onVerifyComplete: (result: boolean) => void;
 }
 
+type VerificationStatus = "idle" | "success" | "insufficient";
+
 export default function BalanceChecker({
   publicKey,
   onVerifyStart,
@@ -20,7 +22,7 @@ export default function BalanceChecker({
   const [assetCode, setAssetCode] = useState("XLM"); 
   const [userBalance, setUserBalance] = useState<number | null>(null);
   const [showExactBalance, setShowExactBalance] = useState(false); // Default hidden for privacy
-  const [verificationSuccess, setVerificationSuccess] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -52,7 +54,7 @@ export default function BalanceChecker({
 
   const handleVerify = async () => {
     setError(null);
-    setVerificationSuccess(false);
+    setVerificationStatus("idle");
     onVerifyStart();
     setIsLoading(true);
 
@@ -92,9 +94,7 @@ export default function BalanceChecker({
         publicKey
       );
 
-      if (result) {
-        setVerificationSuccess(true);
-      }
+      setVerificationStatus(result ? "success" : "insufficient");
       onVerifyComplete(result);
     } catch (err) {
       console.error('Verification error:', err);
@@ -185,8 +185,8 @@ export default function BalanceChecker({
         {isLoading ? 'Processing ZK Pipeline...' : 'Generate & Verify Proof'}
       </button>
 
-      {/* ANIMATED SUCCESS BANNER CARD */}
-      {verificationSuccess && (
+      {/* SUCCESS BANNER: proof generated AND contract confirmed balance >= threshold */}
+      {verificationStatus === "success" && (
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 shadow-sm space-y-2 animate-bounce-short">
           <div className="flex items-center gap-2.5 text-green-800">
             <span className="text-xl">🛡️</span>
@@ -194,6 +194,22 @@ export default function BalanceChecker({
           </div>
           <p className="text-sm text-green-700 font-medium leading-relaxed">
             The Soroban smart contract has successfully processed your Groth16 cryptographic proof. Your wallet has been validated to hold at least <strong>{parseFloat(threshold).toLocaleString()} {assetCode}</strong> without exposing your exact financial statements or raw data metrics to the ledger!
+          </p>
+        </div>
+      )}
+
+      {/* INSUFFICIENT BALANCE BANNER: the pipeline ran fine end-to-end, but the
+          contract correctly determined balance < threshold. This is a normal,
+          expected outcome - not an error - so it gets its own calm message
+          rather than the generic red error banner. */}
+      {verificationStatus === "insufficient" && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm space-y-2">
+          <div className="flex items-center gap-2.5 text-amber-800">
+            <span className="text-xl">🔎</span>
+            <h4 className="text-base font-bold tracking-tight">Threshold Not Met</h4>
+          </div>
+          <p className="text-sm text-amber-700 font-medium leading-relaxed">
+            The proof was generated and verified on-chain successfully, but it confirms your wallet does <strong>not</strong> currently hold at least <strong>{parseFloat(threshold).toLocaleString()} {assetCode}</strong>. No exact balance was revealed in this check.
           </p>
         </div>
       )}
