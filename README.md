@@ -199,51 +199,6 @@ stellar keys fund my-account
 
 ---
 
-## Project Structure
-
-```
-zk-balance/
-├── zk-circuits/
-│   ├── balance_proof.circom     # ZK circuit definition
-│   ├── compile.sh                # Circuit compilation script
-│   └── setup.sh                  # Trusted setup script
-│
-├── groth16-verifier/
-│   ├── Cargo.toml                # Rust dependencies
-│   ├── src/
-│   │   └── lib.rs                # Soroban verifier contract
-│   └── .stellar/                 # Stellar configuration
-│
-├── frontend/
-│   ├── app/
-│   │   ├── page.tsx              # Main page
-│   │   ├── layout.tsx            # Root layout
-│   │   └── globals.css           # Global styles
-│   ├── components/
-│   │   ├── ConnectWallet.tsx     # Wallet connection
-│   │   ├── BalanceChecker.tsx    # Balance input & proof flow
-│   │   └── ResultDisplay.tsx     # Verification result display
-│   ├── lib/
-│   │   ├── proofGenerator.ts     # ZK proof generation
-│   │   ├── verifier.ts           # On-chain verification
-│   │   └── stellar.ts            # Stellar helpers
-│   ├── public/
-│   │   └── circuits/
-│   │       ├── balance_proof.wasm
-│   │       └── circuit_final.zkey
-│   ├── package.json
-│   └── .env.local
-│
-├── scripts/
-│   ├── deploy-verifier.js        # Contract deployment
-│   ├── extract-vk.js             # Extract VK constants
-│   └── test-verifier.js          # Contract testing
-│
-└── README.md
-```
-
----
-
 ## Installation
 
 ### 1. Clone the Repository
@@ -304,23 +259,6 @@ NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 NEXT_PUBLIC_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 NEXT_PUBLIC_VERIFIER_CONTRACT_ID=CCKF4HGIJZ2T3GJJKJVAWJGFZTZID3LB342DINZH2V2DQT24B5U4HPH7
 ```
-
-### Contract Configuration
-
-In `groth16-verifier/src/lib.rs`, ensure the verification key constants are correctly set:
-
-```rust
-// Replace these with your actual VK bytes from extract-vk.js
-const VK_ALPHA_G1: [u8; 64] = [ /* your alpha G1 bytes */ ];
-const VK_BETA_G2: [u8; 128] = [ /* your beta G2 bytes */ ];
-const VK_GAMMA_G2: [u8; 128] = [ /* your gamma G2 bytes */ ];
-const VK_DELTA_G2: [u8; 128] = [ /* your delta G2 bytes */ ];
-const VK_IC0: [u8; 64] = [ /* your IC0 bytes */ ];
-const VK_IC1: [u8; 64] = [ /* your IC1 bytes */ ];
-const VK_IC2: [u8; 64] = [ /* your IC2 bytes */ ];
-```
-
----
 
 ## Deployment
 
