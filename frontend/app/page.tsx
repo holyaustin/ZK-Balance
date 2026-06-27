@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-// Fix 1: Using clean relative folder paths since your Next project doesn't use a 'src' directory
+// Import clear relative folder paths matching your project directory topology
 import ConnectWallet from "../components/ConnectWallet";
 import BalanceChecker from "../components/BalanceChecker";
+import UseCases from "../components/UseCases"; // FIX: Imported the new component
 
 export default function Home() {
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -21,7 +22,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased flex flex-col">
+    <div className="min-h-screen bg-background text-foreground antialiased flex flex-col pb-16">
       {/* Top Header Navigation Bar */}
       <header className="border-b border-border bg-card/60 backdrop-blur-md sticky top-0 z-40 w-full transition-colors duration-200">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -52,65 +53,73 @@ export default function Home() {
       </header>
 
       {/* Main Content Dashboard Area */}
-      <main className="flex-1 mx-auto w-full max-w-md px-4 py-12 sm:py-16">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-3">
-            ZK-Balance Checker
-          </h1>
-          <p className="text-muted font-medium text-sm sm:text-base">
-            Prove you have enough funds without revealing your exact ledger balance
-          </p>
+      <main className="flex-1 w-full mx-auto max-w-7xl px-4 py-12 sm:py-16 flex flex-col items-center">
+        {/* Isolated max-w-md workspace layout column */}
+        <div className="w-full max-w-md">
+          <div className="text-center mb-10">
+            <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-3">
+              ZK-Balance Checker
+            </h1>
+            <p className="text-muted font-medium text-sm sm:text-base">
+              Prove you have enough funds without revealing your exact ledger balance
+            </p>
+          </div>
+
+          {!publicKey ? (
+            <div className="rounded-2xl bg-card p-6 border border-border shadow-xs">
+              <ConnectWallet onConnect={setPublicKey} />
+            </div>
+          ) : (
+            <div className="space-y-6 animate-scale-up">
+              {/* Mobile Account Indicator Fallback visible when screens are narrow */}
+              <div className="sm:hidden rounded-xl border border-emerald-200/60 bg-emerald-50/50 p-3.5 text-center dark:border-emerald-900/30 dark:bg-emerald-950/20">
+                <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-400">
+                  ✅ Connected: {publicKey.slice(0, 6)}...{publicKey.slice(-4)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-card p-6 border border-border shadow-md">
+                <BalanceChecker
+                  publicKey={publicKey}
+                  onVerifyStart={() => setIsLoading(true)}
+                  onVerifyComplete={(result) => {
+                    setIsVerified(result);
+                    setIsLoading(false);
+                  }}
+                />
+
+                {isLoading && (
+                  <div className="mt-6 flex flex-col items-center justify-center py-4 border-t border-border animate-pulse">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                    <p className="mt-3 font-semibold text-sm text-muted text-center">Generating zero-knowledge math verification proof...</p>
+                  </div>
+                )}
+
+                {isVerified !== null && !isLoading && (
+                  <div className={`mt-6 rounded-xl p-5 text-center border ring-1 transition-all duration-300 ${
+                    isVerified 
+                      ? "bg-emerald-50/40 border-emerald-200/60 ring-emerald-100/30 dark:bg-emerald-950/10 dark:border-emerald-900/30" 
+                      : "bg-rose-50/40 border-rose-200/60 ring-rose-100/30 dark:bg-rose-950/10 dark:border-rose-900/30"
+                  }`}>
+                    <div className="text-4xl mb-2 animate-bounce">{isVerified ? "🛡️" : "⚠️"}</div>
+                    <h3 className={`text-lg font-extrabold tracking-tight ${
+                      isVerified ? "text-emerald-800 dark:text-emerald-400" : "text-rose-800 dark:text-rose-400"
+                    }`}>
+                      {isVerified
+                        ? "Proof Verified! Sufficient Balance Validated On-Chain."
+                        : "Verification Failed. Target Threshold Math Rejected."}
+                    </h3>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        {!publicKey ? (
-          <div className="rounded-2xl bg-card p-6 border border-border shadow-xs">
-            <ConnectWallet onConnect={setPublicKey} />
-          </div>
-        ) : (
-          <div className="space-y-6 animate-scale-up">
-            {/* Mobile Account Indicator Fallback visible when screens are narrow */}
-            <div className="sm:hidden rounded-xl border border-emerald-200/60 bg-emerald-50/50 p-3.5 text-center dark:border-emerald-900/30 dark:bg-emerald-950/20">
-              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-400">
-                ✅ Connected: {publicKey.slice(0, 6)}...{publicKey.slice(-4)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-card p-6 border border-border shadow-md">
-              <BalanceChecker
-                publicKey={publicKey}
-                onVerifyStart={() => setIsLoading(true)}
-                onVerifyComplete={(result) => {
-                  setIsVerified(result);
-                  setIsLoading(false);
-                }}
-              />
-
-              {isLoading && (
-                <div className="mt-6 flex flex-col items-center justify-center py-4 border-t border-border animate-pulse">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-                  <p className="mt-3 font-semibold text-sm text-muted">Generating zero-knowledge math verification proof...</p>
-                </div>
-              )}
-
-              {isVerified !== null && !isLoading && (
-                <div className={`mt-6 rounded-xl p-5 text-center border ring-1 transition-all duration-300 ${
-                  isVerified 
-                    ? "bg-emerald-50/40 border-emerald-200/60 ring-emerald-100/30 dark:bg-emerald-950/10 dark:border-emerald-900/30" 
-                    : "bg-rose-50/40 border-rose-200/60 ring-rose-100/30 dark:bg-rose-950/10 dark:border-rose-900/30"
-                }`}>
-                  <div className="text-4xl mb-2 animate-bounce">{isVerified ? "🛡️" : "⚠️"}</div>
-                  <h3 className={`text-lg font-extrabold tracking-tight ${
-                    isVerified ? "text-emerald-800 dark:text-emerald-400" : "text-rose-800 dark:text-rose-400"
-                  }`}>
-                    {isVerified
-                      ? "Proof Verified! Sufficient Balance Validated On-Chain."
-                      : "Verification Failed. Target Threshold Math Rejected."}
-                  </h3>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* USE CASE SECTION ACCESSIBLE TO CONNECTED AND UNCONNECTED USERS */}
+        <div className="w-full border-t border-border/60 mt-16">
+          <UseCases />
+        </div>
       </main>
     </div>
   );
