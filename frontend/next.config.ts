@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    // Empty config is sufficient to acknowledge Turbopack usage
+    // You can add Turbopack-specific config here if needed
+  },
 
   webpack: (config, { isServer, webpack }) => {
     if (!isServer) {

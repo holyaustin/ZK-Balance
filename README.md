@@ -145,7 +145,7 @@ The Soroban contract uses Stellar's BN254 host functions:
 
 ## Live Demo
 
-- **Frontend**: [https://zk-balance.vercel.app](https://zk-balance.vercel.app)
+- **Frontend**: [https://zk-balance.vercel.app](https://zk-balance.vercel.app) 
 - **Contract**: `CCKF4HGIJZ2T3GJJKJVAWJGFZTZID3LB342DINZH2V2DQT24B5U4HPH7`
 - **GitHub**: [holyaustin/ZK-Balance](https://github.com/holyaustin/ZK-Balance)
 - **Twitter/X**: [@holyaustin](https://x.com/holyaustin)
