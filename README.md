@@ -1,20 +1,4 @@
 # ZK-Balance — Proof of Funds Without Revealing Balance
-## Description
-A web app that lets a Stellar user prove they hold at least a specified minimum balance of a specific asset (e.g., USDC) without revealing their exact balance. The user generates a ZK proof off-chain, submits it to a Soroban verifier contract, and the contract returns a simple true/false — the user either meets the threshold or they don't. This is the classic "range proof" / "proof-of-balance" pattern — a perfect first ZK project.
-
-Real-world use case: A tenant proving they have enough funds for a security deposit to a landlord, or a trader proving they meet a minimum balance requirement for a DeFi pool, without broadcasting their wallet balance to the world.
-
-## Tools & Tech Stack
-Component	Technology
-ZK Framework	Circom 2.0 + Groth16 (smallest proofs, cheapest to verify on Stellar)
-ZK DevKit	stellar-zk — unified CLI that handles circuit compilation, proof generation, contract deployment, and on-chain verification
-Smart Contract	Soroban Groth16 verifier contract (BN254)
-Frontend	React + TypeScript + @stellar/stellar-sdk
-Network	Stellar Testnet
-
-
-# ZK-Balance: Zero-Knowledge Proof of Funds on Stellar
-
 [![Stellar](https://img.shields.io/badge/Stellar-Protocol%2025%2B-7B68EE)](https://stellar.org)
 [![Circom](https://img.shields.io/badge/Circom-2.0-FF6B6B)](https://docs.circom.io/)
 [![Soroban](https://img.shields.io/badge/Soroban-Rust-FFD93D)](https://developers.stellar.org/docs/build/smart-contracts)
@@ -22,6 +6,12 @@ Network	Stellar Testnet
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
+## Description
+A dApp that lets a Stellar user prove they hold at least a specified minimum balance of a specific asset (e.g. XLM, USDC) without revealing their exact balance. The user generates a ZK proof off-chain, submits it to a Soroban verifier contract, and the contract returns a simple true/false — the user either meets the threshold or they don't. This is the classic "range proof" / "proof-of-balance" pattern — a perfect first ZK project.
+
+Real-world use case: A tenant proving they have enough funds for a security deposit to a landlord, or a trader proving they meet a minimum balance requirement for a DeFi pool, without broadcasting their wallet balance to the world.
+
+# ZK-Balance: Zero-Knowledge Proof of Funds on Stellar
 
 ## 📚 Table of Contents
 
@@ -109,7 +99,7 @@ The Soroban contract uses Stellar's BN254 host functions:
 | **ZK Circuit** | Circom 2.0 | Define the `balance >= threshold` logic |
 | **Proof System** | Groth16 | Generate and verify zero-knowledge proofs |
 | **Smart Contract** | Soroban (Rust) | On-chain proof verification |
-| **Frontend** | Next.js 14 + TypeScript | User interface and wallet integration |
+| **Frontend** | Next.js 16 + TypeScript + TailwindCSS | User interface and wallet integration |
 | **Wallet** | Freighter | Stellar wallet connection |
 | **SDK** | @stellar/stellar-sdk | Stellar network interaction |
 | **Network** | Stellar Testnet | Contract deployment and testing |
@@ -158,7 +148,7 @@ The Soroban contract uses Stellar's BN254 host functions:
 - **Frontend**: [https://zk-balance.vercel.app](https://zk-balance.vercel.app)
 - **Contract**: `CCKF4HGIJZ2T3GJJKJVAWJGFZTZID3LB342DINZH2V2DQT24B5U4HPH7`
 - **GitHub**: [holyaustin/ZK-Balance](https://github.com/holyaustin/ZK-Balance)
-- **Twitter/X**: [@holyaustin](https://twitter.com/holyaustin)
+- **Twitter/X**: [@holyaustin](https://x.com/holyaustin)
 
 ---
 
